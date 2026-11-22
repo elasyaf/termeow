@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 
 	"github.com/creack/pty"
@@ -63,6 +64,9 @@ func bridgeReadWriter(
 	}
 
 	_ = send(Envelope{Type: TypeStatus, Message: "connected"})
+	if initialTitle := currentShortWd(); initialTitle != "" {
+		_ = send(Envelope{Type: TypeTitle, Data: initialTitle})
+	}
 
 	errCh := make(chan error, 2)
 
@@ -127,4 +131,19 @@ func maxUint16(v, fallback uint16) uint16 {
 		return fallback
 	}
 	return v
+}
+
+func currentShortWd() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" && strings.HasPrefix(wd, home) {
+		rel := strings.TrimPrefix(wd, home)
+		if rel == "" {
+			return "~"
+		}
+		return "~" + rel
+	}
+	return wd
 }

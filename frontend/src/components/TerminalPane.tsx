@@ -11,6 +11,22 @@ interface TerminalPaneProps {
   fontSize: number;
   textColor: string;
   bgColor: string;
+  onTitleChange: (tabId: string, title: string) => void;
+}
+
+function formatTabPath(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "~";
+  if (trimmed === "/" || trimmed === "~") return trimmed;
+
+  const homeNormalized = trimmed.replace(/^\/(?:Users|home)\/[^/]+/, "~");
+  if (homeNormalized === "~") return "~";
+
+  const parts = homeNormalized.split("/").filter(Boolean);
+  if (parts.length <= 2) {
+    return homeNormalized.startsWith("/") ? `/${parts.join("/")}` : parts.join("/");
+  }
+  return parts.slice(-2).join("/");
 }
 
 export const TerminalPane: React.FC<TerminalPaneProps> = ({
@@ -20,6 +36,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
   fontSize,
   textColor,
   bgColor,
+  onTitleChange,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -27,6 +44,16 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
   const initialFontSizeRef = useRef<number>(fontSize);
   const initialTextColorRef = useRef<string>(textColor);
   const initialBgColorRef = useRef<string>(bgColor);
+  const onTitleChangeRef = useRef(onTitleChange);
+  const tabRef = useRef(tab);
+
+  useEffect(() => {
+    onTitleChangeRef.current = onTitleChange;
+  }, [onTitleChange]);
+
+  useEffect(() => {
+    tabRef.current = tab;
+  }, [tab]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -47,24 +74,29 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
     const fitAddon = new FitAddon();
     termRef.current = term;
     fitRef.current = fitAddon;
+    const fitSafely = (): void => {
+      if (el.clientWidth > 0 && el.clientHeight > 0) {
+        fitAddon.fit();
+      }
+    };
+
     term.loadAddon(fitAddon);
     term.open(el);
-    requestAnimationFrame(() => {
-      fitAddon.fit();
-    });
+    const rafId = requestAnimationFrame(fitSafely);
 
+    const currentTab = tabRef.current;
     const params = new URLSearchParams({
       token,
-      mode: tab.mode,
+      mode: currentTab.mode,
       cols: String(term.cols),
       rows: String(term.rows),
     });
 
-    if (tab.mode === "ssh" && tab.host) {
-      params.set("host", tab.host.hostName);
-      params.set("port", String(tab.host.port));
-      if (tab.host.user) params.set("user", tab.host.user);
-      if (tab.host.identityFile) params.set("identityFile", tab.host.identityFile);
+    if (currentTab.mode === "ssh" && currentTab.host) {
+      params.set("host", currentTab.host.hostName);
+      params.set("port", String(currentTab.host.port));
+      if (currentTab.host.user) params.set("user", currentTab.host.user);
+      if (currentTab.host.identityFile) params.set("identityFile", currentTab.host.identityFile);
     }
 
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -81,6 +113,8 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
         const env = JSON.parse(ev.data) as Envelope;
         if (env.type === "output" && env.data) {
           term.write(env.data);
+        } else if (env.type === "title" && env.data) {
+          onTitleChangeRef.current(currentTab.id, formatTabPath(env.data));
         } else if (env.type === "error" && env.message) {
           term.writeln(`\r\n\x1b[31m[termeow error] ${env.message}\x1b[0m`);
         }
@@ -101,21 +135,45 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
       sendEnvelope({ type: "resize", cols, rows });
     });
 
+    const titleDisposable = term.onTitleChange((title) => {
+      const trimmed = title.trim();
+      if (currentTab.mode === "local" && trimmed) {
+        onTitleChangeRef.current(currentTab.id, formatTabPath(trimmed));
+      }
+    });
+
+    const osc7Disposable = term.parser.registerOscHandler(7, (data) => {
+      if (currentTab.mode !== "local") return false;
+      try {
+        const parsed = new URL(data);
+        const path = decodeURIComponent(parsed.pathname);
+        if (path) {
+          onTitleChangeRef.current(currentTab.id, formatTabPath(path));
+        }
+      } catch {
+        // Ignore malformed OSC 7 payloads.
+      }
+      return false;
+    });
+
     const observer = new ResizeObserver(() => {
-      fitAddon.fit();
+      fitSafely();
     });
     observer.observe(el);
 
     return () => {
+      cancelAnimationFrame(rafId);
       observer.disconnect();
       dataDisposable.dispose();
       resizeDisposable.dispose();
+      titleDisposable.dispose();
+      osc7Disposable.dispose();
       ws.close();
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
     };
-  }, [tab, token]);
+  }, [tab.id, token]);
 
   useEffect(() => {
     if (active && fitRef.current) {
