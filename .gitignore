@@ -1,0 +1,11 @@
+# Dependencies & build artifacts
+frontend/node_modules/
+frontend/dist/
+backend/termeow
+
+# OS & editor files
+.DS_Store
+*.log
+*.tsbuildinfo
+.env
+.env.*

@@ -1,0 +1,130 @@
+package session
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"os"
+	"os/exec"
+	"sync"
+
+	"github.com/creack/pty"
+	"github.com/gorilla/websocket"
+)
+
+// RunLocalPTY spawns the user's default shell in a PTY and bridges it to ws until ctx is cancelled.
+func RunLocalPTY(ctx context.Context, ws *websocket.Conn, cols, rows uint16) error {
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "/bin/zsh"
+	}
+
+	cmd := exec.CommandContext(ctx, shell, "-l")
+	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
+
+	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{
+		Cols: maxUint16(cols, 80),
+		Rows: maxUint16(rows, 24),
+	})
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = ptmx.Close()
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+		_ = cmd.Wait()
+	}()
+
+	return bridgeReadWriter(ctx, ws, ptmx, func(c, r uint16) error {
+		return pty.Setsize(ptmx, &pty.Winsize{Cols: c, Rows: r})
+	})
+}
+
+func bridgeReadWriter(
+	ctx context.Context,
+	ws *websocket.Conn,
+	rw io.ReadWriter,
+	resize func(cols, rows uint16) error,
+) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var wsWriteMu sync.Mutex
+	send := func(env Envelope) error {
+		payload, err := MarshalEnvelope(env)
+		if err != nil {
+			return err
+		}
+		wsWriteMu.Lock()
+		defer wsWriteMu.Unlock()
+		return ws.WriteMessage(websocket.TextMessage, payload)
+	}
+
+	_ = send(Envelope{Type: TypeStatus, Message: "connected"})
+
+	errCh := make(chan error, 2)
+
+	// PTY/SSH -> WebSocket
+	go func() {
+		buf := make([]byte, 8192)
+		for {
+			n, err := rw.Read(buf)
+			if n > 0 {
+				if writeErr := send(Envelope{Type: TypeOutput, Data: string(buf[:n])}); writeErr != nil {
+					errCh <- writeErr
+					return
+				}
+			}
+			if err != nil {
+				errCh <- err
+				return
+			}
+		}
+	}()
+
+	// WebSocket -> PTY/SSH
+	go func() {
+		for {
+			_, msg, err := ws.ReadMessage()
+			if err != nil {
+				errCh <- err
+				return
+			}
+
+			var env Envelope
+			if err := json.Unmarshal(msg, &env); err != nil {
+				continue
+			}
+
+			switch env.Type {
+			case TypeInput:
+				if env.Data != "" {
+					if _, err := io.WriteString(rw, env.Data); err != nil {
+						errCh <- err
+						return
+					}
+				}
+			case TypeResize:
+				if env.Cols > 0 && env.Rows > 0 {
+					_ = resize(env.Cols, env.Rows)
+				}
+			}
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-errCh:
+		return err
+	}
+}
+
+func maxUint16(v, fallback uint16) uint16 {
+	if v == 0 {
+		return fallback
+	}
+	return v
+}
