@@ -200,9 +200,19 @@ export const App: React.FC = () => {
     <div className="workspace">
       {sidebarOpen && (
         <aside className="sidebar">
-          <div className="brand-row">
-            <CatLogo size={26} />
-            <span className="brand-name">Termeow</span>
+          <div className="sidebar-header">
+            <div className="brand-row">
+              <CatLogo size={26} />
+              <span className="brand-name">Termeow</span>
+            </div>
+            <button
+              className="sidebar-toggle-btn"
+              onClick={toggleSidebar}
+              aria-label="Hide sidebar"
+              title="Hide sidebar"
+            >
+              ◀
+            </button>
           </div>
 
           <button className="new-local-btn" onClick={openLocalTab}>
@@ -227,20 +237,94 @@ export const App: React.FC = () => {
               ))
             )}
           </div>
+
+          <div className="sidebar-appearance">
+            <div className="section-label">Appearance</div>
+            <div className="color-controls" aria-label="Terminal color controls">
+              <select
+                className="theme-select"
+                value={activePresetId}
+                onChange={(e) => applyPreset(e.target.value)}
+                aria-label="Theme preset"
+                title="Terminal theme preset"
+              >
+                {THEME_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </option>
+                ))}
+                {activePresetId === "custom" && <option value="custom">Custom</option>}
+              </select>
+              <div className="color-pickers-row">
+                <label className="color-picker-label" title="Text color">
+                  <span>Text</span>
+                  <input
+                    type="color"
+                    value={textColor}
+                    onChange={(e) => updateTextColor(e.target.value)}
+                    aria-label="Text color"
+                  />
+                </label>
+                <label className="color-picker-label" title="Background color">
+                  <span>BG</span>
+                  <input
+                    type="color"
+                    value={bgColor}
+                    onChange={(e) => updateBgColor(e.target.value)}
+                    aria-label="Background color"
+                  />
+                </label>
+                {(textColor !== DEFAULT_TEXT_COLOR || bgColor !== DEFAULT_BG_COLOR) && (
+                  <button
+                    className="font-btn"
+                    onClick={resetColors}
+                    title="Reset colors to default"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="font-controls" aria-label="Terminal font size controls">
+              <span className="control-label">Font</span>
+              <div className="font-buttons">
+                <button
+                  className="font-btn"
+                  onClick={() => updateFontSize(-1)}
+                  disabled={fontSize <= MIN_FONT_SIZE}
+                  title="Decrease font size"
+                >
+                  A-
+                </button>
+                <span className="font-size-label">{fontSize}px</span>
+                <button
+                  className="font-btn"
+                  onClick={() => updateFontSize(1)}
+                  disabled={fontSize >= MAX_FONT_SIZE}
+                  title="Increase font size"
+                >
+                  A+
+                </button>
+              </div>
+            </div>
+          </div>
         </aside>
       )}
 
       <main className="main-area">
         <header className="tab-bar">
           <div className="tab-bar-left">
-            <button
-              className="sidebar-toggle-btn"
-              onClick={toggleSidebar}
-              aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
-              title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
-            >
-              {sidebarOpen ? "◀ Hide" : "▶ Hosts"}
-            </button>
+            {!sidebarOpen && (
+              <button
+                className="sidebar-toggle-btn"
+                onClick={toggleSidebar}
+                aria-label="Show sidebar"
+                title="Show sidebar"
+              >
+                ▶ Menu
+              </button>
+            )}
 
             <div className="tab-list">
             {tabs.map((tab) => (
@@ -262,72 +346,6 @@ export const App: React.FC = () => {
                 </button>
               </div>
             ))}
-            </div>
-          </div>
-
-          <div className="toolbar-controls">
-            <div className="color-controls" aria-label="Terminal color controls">
-              <select
-                className="theme-select"
-                value={activePresetId}
-                onChange={(e) => applyPreset(e.target.value)}
-                aria-label="Theme preset"
-                title="Terminal theme preset"
-              >
-                {THEME_PRESETS.map((preset) => (
-                  <option key={preset.id} value={preset.id}>
-                    {preset.label}
-                  </option>
-                ))}
-                {activePresetId === "custom" && <option value="custom">Custom</option>}
-              </select>
-              <label className="color-picker-label" title="Text color">
-                <span>Text</span>
-                <input
-                  type="color"
-                  value={textColor}
-                  onChange={(e) => updateTextColor(e.target.value)}
-                  aria-label="Text color"
-                />
-              </label>
-              <label className="color-picker-label" title="Background color">
-                <span>BG</span>
-                <input
-                  type="color"
-                  value={bgColor}
-                  onChange={(e) => updateBgColor(e.target.value)}
-                  aria-label="Background color"
-                />
-              </label>
-              {(textColor !== DEFAULT_TEXT_COLOR || bgColor !== DEFAULT_BG_COLOR) && (
-                <button
-                  className="font-btn"
-                  onClick={resetColors}
-                  title="Reset colors to default"
-                >
-                  Reset
-                </button>
-              )}
-            </div>
-
-            <div className="font-controls" aria-label="Terminal font size controls">
-              <button
-                className="font-btn"
-                onClick={() => updateFontSize(-1)}
-                disabled={fontSize <= MIN_FONT_SIZE}
-                title="Decrease font size"
-              >
-                A-
-              </button>
-              <span className="font-size-label">{fontSize}px</span>
-              <button
-                className="font-btn"
-                onClick={() => updateFontSize(1)}
-                disabled={fontSize >= MAX_FONT_SIZE}
-                title="Increase font size"
-              >
-                A+
-              </button>
             </div>
           </div>
         </header>
