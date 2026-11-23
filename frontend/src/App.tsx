@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import { CatLogo } from "./components/CatLogo";
 import { TerminalPane } from "./components/TerminalPane";
 import type { SSHHostEntry, TerminalTab } from "./types/protocol";
@@ -134,10 +134,14 @@ export const App: React.FC = () => {
 
   const openLocalTab = (): void => {
     const id = `local-${Date.now()}`;
-    const newTab: TerminalTab = { id, title: "local zsh", mode: "local" };
+    const newTab: TerminalTab = { id, title: "~", mode: "local" };
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(id);
   };
+
+  const updateTabTitle = useCallback((id: string, title: string): void => {
+    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, title } : t)));
+  }, []);
 
   const openSSHTab = (host: SSHHostEntry): void => {
     const id = `ssh-${host.alias}-${Date.now()}`;
@@ -363,6 +367,7 @@ export const App: React.FC = () => {
                 fontSize={fontSize}
                 textColor={textColor}
                 bgColor={bgColor}
+                onTitleChange={updateTabTitle}
               />
             ))
           )}

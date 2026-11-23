@@ -10,6 +10,7 @@ const (
 	TypeResize MessageType = "resize"
 	TypeOutput MessageType = "output"
 	TypeStatus MessageType = "status"
+	TypeTitle  MessageType = "title"
 	TypeError  MessageType = "error"
 )
 

@@ -1,4 +1,4 @@
-export type MessageType = "input" | "resize" | "output" | "status" | "error";
+export type MessageType = "input" | "resize" | "output" | "status" | "title" | "error";
 
 export interface Envelope {
   type: MessageType;

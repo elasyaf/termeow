@@ -97,7 +97,7 @@ func RunSSH(ctx context.Context, ws *websocket.Conn, target SSHTarget, cols, row
 		w: stdin,
 	}
 
-	return bridgeReadWriter(ctx, ws, combined, func(cols, rows uint16) error {
+	return bridgeReadWriter(ctx, ws, combined, target.Host, func(cols, rows uint16) error {
 		return sess.WindowChange(int(rows), int(cols))
 	})
 }
