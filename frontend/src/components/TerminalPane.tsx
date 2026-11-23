@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { Unicode11Addon } from "@xterm/addon-unicode11";
 import "@xterm/xterm/css/xterm.css";
 import type { Envelope, TerminalTab } from "../types/protocol";
 
@@ -60,6 +61,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
     if (!el) return;
 
     const term = new Terminal({
+      allowProposedApi: true,
       cursorBlink: true,
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
       fontSize: initialFontSizeRef.current,
@@ -81,7 +83,11 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
     };
 
     term.loadAddon(fitAddon);
+    const unicode11Addon = new Unicode11Addon();
+    term.loadAddon(unicode11Addon);
+    term.unicode.activeVersion = "11";
     term.open(el);
+    fitSafely();
     const rafId = requestAnimationFrame(fitSafely);
 
     const currentTab = tabRef.current;
@@ -106,6 +112,11 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(env));
       }
+    };
+
+    ws.onopen = () => {
+      fitSafely();
+      sendEnvelope({ type: "resize", cols: term.cols, rows: term.rows });
     };
 
     ws.onmessage = (ev: MessageEvent<string>) => {
