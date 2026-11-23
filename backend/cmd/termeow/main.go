@@ -20,7 +20,6 @@ import (
 
 	"github.com/gorilla/websocket"
 	"termeow/internal/session"
-	"termeow/internal/sshconfig"
 )
 
 func main() {
@@ -48,13 +47,8 @@ func main() {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
-	mux.HandleFunc("GET /api/hosts", requireToken(token, func(w http.ResponseWriter, r *http.Request) {
-		hosts, err := sshconfig.ParseDefault()
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"hosts": hosts})
+	mux.HandleFunc("GET /api/session", requireToken(token, func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	}))
 
 	mux.HandleFunc("GET /ws", requireToken(token, func(w http.ResponseWriter, r *http.Request) {
@@ -65,27 +59,10 @@ func main() {
 		defer ws.Close()
 
 		q := r.URL.Query()
-		mode := q.Get("mode")
 		cols := parseUint16(q.Get("cols"), 80)
 		rows := parseUint16(q.Get("rows"), 24)
 
-		var runErr error
-		if mode == "ssh" {
-			target := session.SSHTarget{
-				Host:         q.Get("host"),
-				Port:         int(parseUint16(q.Get("port"), 22)),
-				User:         q.Get("user"),
-				IdentityFile: q.Get("identityFile"),
-			}
-			if target.Host == "" {
-				sendWSError(ws, "missing host parameter")
-				return
-			}
-			runErr = session.RunSSH(r.Context(), ws, target, cols, rows)
-		} else {
-			runErr = session.RunLocalPTY(r.Context(), ws, cols, rows)
-		}
-
+		runErr := session.RunLocalPTY(r.Context(), ws, cols, rows)
 		if runErr != nil && !errors.Is(runErr, context.Canceled) {
 			sendWSError(ws, runErr.Error())
 		}

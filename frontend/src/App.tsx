@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from "react";
 import { CatLogo } from "./components/CatLogo";
 import { TerminalPane } from "./components/TerminalPane";
-import type { SSHHostEntry, TerminalTab } from "./types/protocol";
+import type { TerminalTab } from "./types/protocol";
 
 const MIN_FONT_SIZE = 10;
 const MAX_FONT_SIZE = 28;
@@ -51,7 +51,6 @@ function loadSavedFontSize(): number {
 export const App: React.FC = () => {
   const [token, setToken] = useState<string>("");
   const [connected, setConnected] = useState<boolean>(false);
-  const [hosts, setHosts] = useState<SSHHostEntry[]>([]);
   const [authError, setAuthError] = useState<string>("");
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
@@ -109,10 +108,10 @@ export const App: React.FC = () => {
     });
   };
 
-  const loadHosts = async (sessionToken: string): Promise<void> => {
+  const verifySession = async (sessionToken: string): Promise<void> => {
     setAuthError("");
     try {
-      const res = await fetch("/api/hosts", {
+      const res = await fetch("/api/session", {
         headers: { Authorization: `Bearer ${sessionToken}` },
       });
       if (!res.ok) {
@@ -120,21 +119,19 @@ export const App: React.FC = () => {
         setAuthError(errBody.error ? `Error (${res.status}): ${errBody.error}` : `Connection failed (${res.status}).`);
         return;
       }
-      const data = (await res.json()) as { hosts: SSHHostEntry[] };
-      setHosts(data.hosts);
       setConnected(true);
 
       if (tabs.length === 0) {
         openLocalTab();
       }
     } catch {
-      setAuthError("Cannot reach Termeow daemon on /api/hosts.");
+      setAuthError("Cannot reach Termeow daemon on /api/session.");
     }
   };
 
   const openLocalTab = (): void => {
     const id = `local-${Date.now()}`;
-    const newTab: TerminalTab = { id, title: "~", mode: "local" };
+    const newTab: TerminalTab = { id, title: "~" };
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(id);
   };
@@ -142,18 +139,6 @@ export const App: React.FC = () => {
   const updateTabTitle = useCallback((id: string, title: string): void => {
     setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, title } : t)));
   }, []);
-
-  const openSSHTab = (host: SSHHostEntry): void => {
-    const id = `ssh-${host.alias}-${Date.now()}`;
-    const newTab: TerminalTab = {
-      id,
-      title: host.alias,
-      mode: "ssh",
-      host,
-    };
-    setTabs((prev) => [...prev, newTab]);
-    setActiveTabId(id);
-  };
 
   const closeTab = (id: string): void => {
     setTabs((prev) => {
@@ -175,12 +160,12 @@ export const App: React.FC = () => {
             <h1>Termeow</h1>
           </div>
           <p className="subtitle">
-            Browser-native terminal &amp; SSH manager. Paste the session token printed by the Go daemon.
+            Browser-native terminal. Paste the session token printed by the Go daemon.
           </p>
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              void loadHosts(token.trim());
+              void verifySession(token.trim());
             }}
           >
             <input
@@ -220,27 +205,10 @@ export const App: React.FC = () => {
           </div>
 
           <button className="new-local-btn" onClick={openLocalTab}>
-            + Local Shell
+            + New Terminal
           </button>
 
-          <div className="section-label">~/.ssh/config ({hosts.length})</div>
-          <div className="host-list">
-            {hosts.length === 0 ? (
-              <div className="empty-hosts">No hosts found in ~/.ssh/config</div>
-            ) : (
-              hosts.map((h) => (
-                <button
-                  key={h.alias}
-                  className="host-item"
-                  onClick={() => openSSHTab(h)}
-                  title={`${h.user || "default"}@${h.hostName}:${h.port}`}
-                >
-                  <span className="host-alias">{h.alias}</span>
-                  <span className="host-meta">{h.hostName}</span>
-                </button>
-              ))
-            )}
-          </div>
+          <div className="sidebar-spacer" />
 
           <div className="sidebar-appearance">
             <div className="section-label">Appearance</div>
@@ -356,7 +324,7 @@ export const App: React.FC = () => {
 
         <div className="terminal-stage" style={{ backgroundColor: bgColor }}>
           {tabs.length === 0 ? (
-            <div className="empty-stage">Open a Local Shell or pick an SSH host from the sidebar.</div>
+            <div className="empty-stage">Click + New Terminal in the sidebar to start a session.</div>
           ) : (
             tabs.map((tab) => (
               <TerminalPane

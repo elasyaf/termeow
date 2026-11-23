@@ -93,17 +93,9 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
     const currentTab = tabRef.current;
     const params = new URLSearchParams({
       token,
-      mode: currentTab.mode,
       cols: String(term.cols),
       rows: String(term.rows),
     });
-
-    if (currentTab.mode === "ssh" && currentTab.host) {
-      params.set("host", currentTab.host.hostName);
-      params.set("port", String(currentTab.host.port));
-      if (currentTab.host.user) params.set("user", currentTab.host.user);
-      if (currentTab.host.identityFile) params.set("identityFile", currentTab.host.identityFile);
-    }
 
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(`${proto}//${window.location.host}/ws?${params.toString()}`);
@@ -148,13 +140,12 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
 
     const titleDisposable = term.onTitleChange((title) => {
       const trimmed = title.trim();
-      if (currentTab.mode === "local" && trimmed) {
+      if (trimmed) {
         onTitleChangeRef.current(currentTab.id, formatTabPath(trimmed));
       }
     });
 
     const osc7Disposable = term.parser.registerOscHandler(7, (data) => {
-      if (currentTab.mode !== "local") return false;
       try {
         const parsed = new URL(data);
         const path = decodeURIComponent(parsed.pathname);
